@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:sms/sms.dart';
 import 'dart:async';
+import 'package:translator/translator.dart';
 import 'dart:io';
 
 void main() {
@@ -21,27 +22,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class HomePage extends StatefulWidget {
-  @override
-  _HomePageState createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  String smsMessage;
-
-  @override
-  void initState() {
-    receiver.onSmsReceived.listen((SmsMessage msg) {
-      setState(() {
-        smsMessage = msg.body;
-      });
-      return print(msg.body);
-    });
-    super.initState();
-  }
-
-  SmsReceiver receiver = new SmsReceiver();
-
+class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,19 +31,7 @@ class _HomePageState extends State<HomePage> {
         title: Text('Sms Reader'),
         centerTitle: true,
       ),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child:
-                  Text(smsMessage == null ? 'No Message Recieved' : smsMessage),
-            ),
-          ),
-          TextToSpeech(),
-        ],
-      ),
+      body: TextToSpeech(),
     );
   }
 }
@@ -75,16 +44,31 @@ class TextToSpeech extends StatefulWidget {
 class _TextToSpeechState extends State<TextToSpeech> {
   String smsMessage;
   List<String> smsMessages = [];
+  List<String> smsMessagesHindi = [];
+  List<SmsMessage> allMessages = [];
 
   FlutterTts flutterTts = new FlutterTts();
+  final translator = new GoogleTranslator();
+  SmsQuery query = new SmsQuery();
+
+  _getSMSMessages() async {
+    allMessages = await query.querySms(count: 50);
+    // translator.translate('hello', from: 'en', to: 'hi').then((value) {
+    //   print("translated $value");
+    // });
+    setState(() {});
+  }
+
   @override
   void initState() {
+    _getSMSMessages();
     receiver.onSmsReceived.listen((SmsMessage msg) {
       setState(() {
+        allMessages.add(msg);
         smsMessages.add(msg.body);
         smsMessage = msg.body;
       });
-      _speak();
+      _speakThis(smsMessage);
       return print(msg.body);
     });
     super.initState();
@@ -92,70 +76,91 @@ class _TextToSpeechState extends State<TextToSpeech> {
 
   SmsReceiver receiver = new SmsReceiver();
 
-  Future _speak() async {
-    List<dynamic> languages = await flutterTts.getLanguages;
+  Future _speakThis(String message) async {
+    // List<dynamic> languages = await flutterTts.getLanguages;
 
     await flutterTts.setLanguage("en-IN");
 
-    await flutterTts.setSpeechRate(1.0);
+    await flutterTts.setSpeechRate(0.8);
 
     await flutterTts.setVolume(1.0);
 
     await flutterTts.setPitch(1.0);
 
     await flutterTts.isLanguageAvailable("en-IN");
-    await flutterTts
-        .speak(smsMessage == null ? 'No message recieved' : smsMessage);
-    // if (result == 1) setState(() => ttsState = TtsState.playing);
+
+    if (message.split('-').length == 3) {
+      await flutterTts.speak(
+          '${message.split('-')[0]} has dedicated the song ${message.split('-')[2]} to ${message.split('-')[1]}');
+    } else
+      await flutterTts.speak(message);
   }
 
-  Future _speakThis(String message) async {
-    List<dynamic> languages = await flutterTts.getLanguages;
+  Future _speakThisInHindi(String message) async {
+    // List<dynamic> languages = await flutterTts.getLanguages;
+    await flutterTts.setLanguage("hi-IN");
 
-    await flutterTts.setLanguage("en-IN");
-
-    await flutterTts.setSpeechRate(1.0);
+    await flutterTts.setSpeechRate(0.7);
 
     await flutterTts.setVolume(1.0);
 
     await flutterTts.setPitch(1.0);
 
-    await flutterTts.isLanguageAvailable("en-IN");
-    await flutterTts.speak(message);
-    // if (result == 1) setState(() => ttsState = TtsState.playing);
+    await flutterTts.isLanguageAvailable("hi-IN");
+
+    if (message.split('-').length == 3) {
+      await flutterTts.speak(
+          '${message.split('-')[0]} ने ${message.split('-')[1]} को ${message.split('-')[2]} गाना समर्पित किया है');
+    } else
+      await flutterTts.speak(message);
   }
 
   Future _stop() async {
     await flutterTts.stop();
-    // if (result == 1) setState(() => ttsState = TtsState.stopped);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Flex(
+      direction: Axis.vertical,
       children: <Widget>[
-        SizedBox(
-          height: MediaQuery.of(context).size.height * 0.4,
+        Expanded(
           child: Container(
             color: Colors.amber[50],
-            child: smsMessages.length == 0
+            child: allMessages.length == 0
                 ? Center(
                     child: Text('SMSes you recieve will show up here'),
                   )
                 : ListView.builder(
-                    itemCount: smsMessages.length,
+                    itemCount: allMessages.length,
                     itemBuilder: (context, index) {
                       return Container(
-                        color:
-                            index % 2 == 0 ? Colors.amber[50] : Colors.yellow[50],
-                        child: ListTile(
-                          leading: Icon(Icons.message),
-                          title: Text(smsMessages[index]),
-                          onTap: () {
-                            smsMessage = smsMessages[index];
-                            _speakThis(smsMessages[index]);
-                          },
-                        ),
+                        color: index % 2 == 0
+                            ? Colors.amber[50]
+                            : Colors.yellow[50],
+                        child: FutureBuilder<String>(
+                            future: translator.translate(
+                                allMessages[index].body,
+                                from: 'en',
+                                to: 'hi'),
+                            builder: (context, translatedText) {
+                              return ListTile(
+                                leading: Icon(Icons.message),
+                                title: Text(allMessages[index].body),
+                                subtitle: Text(translatedText.data == null
+                                    ? 'Translating'
+                                    : translatedText.data),
+                                onTap: () {
+                                  smsMessage = allMessages[index].body;
+                                  _speakThis(allMessages[index].body);
+                                },
+                                onLongPress: () {
+                                  _speakThisInHindi(translatedText.data == null
+                                      ? 'Cannot translate'
+                                      : translatedText.data);
+                                },
+                              );
+                            }),
                       );
                     },
                   ),
@@ -167,7 +172,9 @@ class _TextToSpeechState extends State<TextToSpeech> {
             RaisedButton(
               color: Colors.yellow,
               child: Text('Speak'),
-              onPressed: _speak,
+              onPressed: () {
+                _speakThis(smsMessage);
+              },
             ),
             RaisedButton(
               onPressed: _stop,
@@ -176,6 +183,10 @@ class _TextToSpeechState extends State<TextToSpeech> {
             ),
           ],
         ),
+        Padding(
+          padding: EdgeInsets.all(10),
+          child: Text('Tap for english, Long tap for hindi\nName-DedicatedToName-SongName'),
+        )
       ],
     );
   }
